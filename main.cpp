@@ -1,4 +1,4 @@
-// GNU Tatermark 7.9
+// GNU Tatermark 13.3
 
 // Only to GNU/Linux Arch linux
 
@@ -20,7 +20,6 @@
 #include <algorithm>
 #include <sstream>
 
-
 std::vector<std::string> text_lines;
 int cursor_y = 0;
 int cursor_x = 0;
@@ -29,10 +28,11 @@ std::string status_message = "";
 bool is_dirty = false;
 std::string clipboard = "";
 int start_line = 0;
+int start_col = 0;
 
 
 void init_editor() {
-    setlocale(LC_ALL, ""); 
+    setlocale(LC_ALL, "");
     initscr();
     noecho();
     cbreak();
@@ -40,6 +40,7 @@ void init_editor() {
     if (has_colors()) {
         start_color();
         init_pair(1, COLOR_WHITE, COLOR_BLUE);
+        init_pair(2, COLOR_BLACK, COLOR_WHITE);
     }
 }
 
@@ -51,19 +52,27 @@ void cleanup_editor() {
 void draw_header() {
     int max_y, max_x;
     getmaxyx(stdscr, max_y, max_x);
+    
+
     attron(COLOR_PAIR(1));
-    mvprintw(0, 0, " GNU tatermark 7.9");
-    mvprintw(0, (max_x - filename.length()) / 2, "%s", filename.c_str());
     for (int i = 0; i < max_x; ++i) {
-        if (i < 17 || (i > (max_x - filename.length()) / 2 - 1 && i < (max_x + filename.length()) / 2 + 1)) continue;
         mvaddch(0, i, ' ');
     }
+    
+
+    std::string title = (filename.length() > 20 ? filename.substr(0, 17) + "..." : filename);
+    mvprintw(0, (max_x - title.length()) / 2, "%s", title.c_str());
+    
+
+    mvprintw(0, 0, "GNU tCat 13.3");
+
     attroff(COLOR_PAIR(1));
 }
 
 void draw_statusbar() {
     int max_y, max_x;
     getmaxyx(stdscr, max_y, max_x);
+    
     attron(A_BOLD);
     mvprintw(max_y - 3, 0, "%.*s", max_x, status_message.c_str());
     attroff(A_BOLD);
@@ -72,26 +81,44 @@ void draw_statusbar() {
 void draw_footer() {
     int max_y, max_x;
     getmaxyx(stdscr, max_y, max_x);
-    attron(COLOR_PAIR(1));
-    mvprintw(max_y - 2, 0, "^G Справка  ^O Записать  ^F Поиск    ^K Вырезать  ^T Выполнить ^C Позиция");
-    mvprintw(max_y - 1, 0, "^X Выход    ^R ЧитФайл   ^\\ Замена   ^U Вставить  ^J Выровнять ^/ К строке");
-    attroff(COLOR_PAIR(1));
+    
+    attron(COLOR_PAIR(2));
+    for (int i = 0; i < max_x; ++i) {
+        mvaddch(max_y - 2, i, ' ');
+        mvaddch(max_y - 1, i, ' ');
+    }
+    
+    mvprintw(max_y - 2, 0, "^G Справка  ^O Записать  ^W Поиск    ^K Вырезать  ^T Выполнить");
+    mvprintw(max_y - 1, 0, "^X Выход    ^R ЧитФайл   ^\\ Замена   ^U Вставить  ^J Выровнять");
+    
+    attroff(COLOR_PAIR(2));
 }
 
 void draw_all() {
     int max_y, max_x;
     getmaxyx(stdscr, max_y, max_x);
-    clear(); 
+    clear();
     int visible_rows = max_y - 4;
+    int visible_cols = max_x;
+
     for (int i = 0; i < visible_rows; ++i) {
         if (start_line + i < text_lines.size()) {
-            mvprintw(i + 1, 0, "%s", text_lines[start_line + i].c_str());
+            std::string line_to_draw = text_lines[start_line + i];
+            if (line_to_draw.length() > start_col) {
+                line_to_draw = line_to_draw.substr(start_col);
+            } else {
+                line_to_draw = "";
+            }
+            if (line_to_draw.length() > visible_cols) {
+                line_to_draw = line_to_draw.substr(0, visible_cols);
+            }
+            mvprintw(i + 1, 0, "%s", line_to_draw.c_str());
         }
     }
     draw_header();
     draw_statusbar();
     draw_footer();
-    move(cursor_y - start_line + 1, cursor_x);
+    move(cursor_y - start_line + 1, cursor_x - start_col);
     refresh();
 }
 
@@ -101,7 +128,7 @@ void draw_welcome_screen() {
     getmaxyx(stdscr, max_y, max_x);
     clear();
     
-    std::string welcome = "Welcome to GNU tatermark 7.9!";
+    std::string welcome = "Welcome to GNU tatermark 13.3!";
     std::string start_msg = "Нажмите любую клавишу для начала работы...";
     
     mvprintw(max_y/2 - 2, (max_x - welcome.length())/2, "%s", welcome.c_str());
@@ -240,18 +267,23 @@ void handle_goto_line() {
 
 void handle_help() {
     clear();
-    mvprintw(1, 0, "GNU Tatermark 7.9 - Помощь по горячим клавишам:");
-    mvprintw(3, 0, "^G - Справка");
-    mvprintw(4, 0, "^X - Выход (с подтверждением сохранения)");
-    mvprintw(5, 0, "^O - Сохранить файл");
-    mvprintw(6, 0, "^F - Поиск текста");
-    mvprintw(7, 0, "^K - Вырезать текущую строку");
-    mvprintw(8, 0, "^U - Вставить строку из буфера");
-    mvprintw(9, 0, "^R - Вставить содержимое другого файла");
-    mvprintw(10, 0, "^\\ - Заменить текст");
-    mvprintw(11, 0, "^C - Показать текущую позицию курсора");
-    mvprintw(12, 0, "^/ - Перейти к строке");
-    mvprintw(14, 0, "Нажмите любую клавишу для возврата в редактор...");
+    int max_y, max_x;
+    getmaxyx(stdscr, max_y, max_x);
+    int left_margin = (max_x - 80) / 2;
+    if (left_margin < 0) left_margin = 0;
+
+    mvprintw(1, left_margin, "GNU Tatermark 13.3 - Помощь по горячим клавишам:");
+    mvprintw(3, left_margin, "^G - Справка");
+    mvprintw(4, left_margin, "^X - Выход (с подтверждением сохранения)");
+    mvprintw(5, left_margin, "^O - Сохранить файл");
+    mvprintw(6, left_margin, "^F - Поиск текста");
+    mvprintw(7, left_margin, "^K - Вырезать текущую строку");
+    mvprintw(8, left_margin, "^U - Вставить строку из буфера");
+    mvprintw(9, left_margin, "^R - Вставить содержимое другого файла");
+    mvprintw(10, left_margin, "^\\ - Заменить текст");
+    mvprintw(11, left_margin, "^C - Показать текущую позицию курсора");
+    mvprintw(12, left_margin, "^/ - Перейти к строке");
+    mvprintw(14, left_margin, "Нажмите любую клавишу для возврата в редактор...");
     refresh();
     getch();
     status_message = "";
@@ -359,6 +391,10 @@ int main(int argc, char** argv) {
             status_message = "Строка: " + std::to_string(cursor_y + 1) + " | Столбец: " + std::to_string(cursor_x + 1);
         } else if (ch == 16) { 
             handle_goto_line();
+        } else if (ch == KEY_RESIZE) {
+
+            resize_term(0, 0); 
+            status_message = "Размер окна изменён.";
         }
         
         switch (ch) {
@@ -414,7 +450,12 @@ int main(int argc, char** argv) {
         }
 
         if (cursor_y < start_line) start_line = cursor_y;
-        if (cursor_y >= start_line + visible_rows) start_line = cursor_y - visible_rows + 1;
+        int max_y_cur, max_x_cur;
+        getmaxyx(stdscr, max_y_cur, max_x_cur);
+        int visible_rows_cur = max_y_cur - 4;
+        if (cursor_y >= start_line + visible_rows_cur) start_line = cursor_y - visible_rows_cur + 1;
+        if (cursor_x < start_col) start_col = cursor_x;
+        if (cursor_x >= start_col + max_x_cur) start_col = cursor_x - max_x_cur + 1;
     }
 
     cleanup_editor();
